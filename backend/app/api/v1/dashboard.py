@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Dict, Any, List
 from sqlalchemy import text
 from app.services.cache import get_revenue_summary
+from app.services.reservations import calculate_monthly_revenue
 from app.core.auth import authenticate_request as get_current_user
 from app.core.database_pool import db_pool
 
@@ -26,6 +27,25 @@ async def get_dashboard_properties(
             return [{"id": r.id, "name": r.name, "timezone": r.timezone} for r in result]
     except Exception:
         raise HTTPException(status_code=503, detail="Property list temporarily unavailable")
+
+@router.get("/dashboard/monthly")
+async def get_dashboard_monthly(
+    property_id: str,
+    month: int = Query(..., ge=1, le=12),
+    year: int = Query(..., ge=2000, le=2100),
+    current_user: dict = Depends(get_current_user)
+) -> Dict[str, Any]:
+    tenant_id = getattr(current_user, "tenant_id", None)
+    if not tenant_id:
+        raise HTTPException(status_code=403, detail="No tenant associated with this user")
+    try:
+        total = await calculate_monthly_revenue(property_id, tenant_id, month, year)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Property not found")
+    except Exception:
+        raise HTTPException(status_code=503, detail="Revenue data temporarily unavailable")
+    return {"property_id": property_id, "month": month, "year": year,
+            "total_revenue": str(total), "currency": "USD"}
 
 @router.get("/dashboard/summary")
 async def get_dashboard_summary(
