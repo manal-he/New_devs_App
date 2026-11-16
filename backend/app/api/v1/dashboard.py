@@ -6,7 +6,15 @@ from app.services.reservations import calculate_monthly_revenue
 from app.core.auth import authenticate_request as get_current_user
 from app.core.database_pool import db_pool
 
+from decimal import Decimal, ROUND_HALF_UP
+
 router = APIRouter()
+
+CENT = Decimal("0.01")
+
+def to_money(value) -> str:
+    """Round once, with Decimal, to cents (half-up). Never pass money through float."""
+    return str(Decimal(str(value)).quantize(CENT, rounding=ROUND_HALF_UP))
 
 @router.get("/dashboard/properties")
 async def get_dashboard_properties(
@@ -45,7 +53,7 @@ async def get_dashboard_monthly(
     except Exception:
         raise HTTPException(status_code=503, detail="Revenue data temporarily unavailable")
     return {"property_id": property_id, "month": month, "year": year,
-            "total_revenue": str(total), "currency": "USD"}
+            "total_revenue": to_money(total), "currency": "USD"}
 
 @router.get("/dashboard/summary")
 async def get_dashboard_summary(
@@ -62,11 +70,9 @@ async def get_dashboard_summary(
     except Exception:
         raise HTTPException(status_code=503, detail="Revenue data temporarily unavailable")
     
-    total_revenue_float = float(revenue_data['total'])
-    
     return {
         "property_id": revenue_data['property_id'],
-        "total_revenue": total_revenue_float,
+        "total_revenue": to_money(revenue_data['total']),
         "currency": revenue_data['currency'],
         "reservations_count": revenue_data['count']
     }
